@@ -1,4 +1,5 @@
 import time
+import os
 
 import urwid
 
@@ -14,15 +15,19 @@ def spinner():
 
 
 class PopupDialog(urwid.Overlay):
-    def __init__(self, loop, internal_widget, attach, width=None, height=None, cancelable=True):
+    def __init__(self, loop, internal_widget, attach, width=None, height=None, cancelable=True, threadable=False, ):
         self.loop = loop
         self.original_widget = loop.widget
         self.internal_widget = internal_widget
         self.cancelable = cancelable
+        self.threadable = threadable
+        self.thread_pipe = None
         if width is None:
             width = 'pack'
-        if width is None:
+        if height is None:
             height = 'pack'
+        if self.threadable:
+            self.thread_pipe = self.loop.watch_pipe(self.threadSignalCallback)
         super().__init__(urwid.LineBox(internal_widget), self.original_widget, 'center', width, 'middle', height)
         if attach:
             self.attach()
@@ -42,13 +47,29 @@ class PopupDialog(urwid.Overlay):
             return True
         return False
 
+    def threadSignalCallback(self, data):
+        if data == b"detach":
+            self.detach()
+        elif data == b"attach":
+            self.attach()
+        self.loop.draw_screen()
+        return True
+
+    def threadedAttach(self):
+        if not self.threadable:
+            raise Exception("Popup is not threadable")
+        os.write(self.thread_pipe, b"attach")
+
+    def threadedDetach(self):
+        if not self.threadable:
+            raise Exception("Popup is not threadable")
+        os.write(self.thread_pipe, b"detach")
 
     def selectable(self):
         return True
 
     def keypress(self, size, key):
         if self.cancelable:
-        
             if key in ('esc', 'ctrl w'):
                 self.detach()
                 return None
@@ -59,21 +80,36 @@ class PopupDialog(urwid.Overlay):
 class WaitDialog(PopupDialog):
     ANIMATION_SPEED = 0.1
     SPINNER = r"/-\|/-\|"
-    def __init__(self, loop, text, attach=True):
+    def __init__(self, loop, text, attach=True, threadable=False):
         self.spinner = spinner()
         self.spinner_widget = urwid.Text(next(self.spinner))
         self.label = urwid.Text(text)
+        self.threadedNextText = []
         dialog = urwid.Filler(urwid.Columns((
             ('pack',self.spinner_widget),
             self.label
         )), 'middle')
-        super().__init__(loop, dialog, attach, 40, 4, cancelable=False)
+        super().__init__(loop, dialog, attach, 40, 4, cancelable=False, threadable=threadable)
 
     def get_text(self, *args, **kwargs):
         return self.label.get_text(*args, **kwargs)
 
     def set_text(self, *args, **kwargs):
         return self.label.set_text(*args, **kwargs)
+
+    def threaded_set_text(self, *args, **kwargs):
+        if not self.threadable:
+            raise Exception("Popup is not threadable")
+        self.threadedNextText.append((args, kwargs))
+        os.write(self.thread_pipe, b"set text")
+
+    def threadSignalCallback(self, data):
+        if data == b"set text":
+            args, kwargs = self.threadedNextText.pop(0)
+            self.set_text(*args, **kwargs)
+        else:
+            super().threadSignalCallback(data)
+        return True
 
     def attach(self):
         if super().attach():

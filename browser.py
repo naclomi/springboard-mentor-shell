@@ -198,7 +198,7 @@ class BrowserApplication(object):
             (1, title_bar),
             self.project_list
         ))
-        self.waitDialog = None
+        self.waitDialog = generic_widgets.WaitDialog(self.loop, "Downloading project", attach=False, threadable=True)
 
     def set_filter(self, new_filter):
         self.project_filter = new_filter
@@ -232,9 +232,9 @@ class BrowserApplication(object):
         self.displayed_projects = self.project_filter.filter(self.projects)
         if len(self.projects) > 0:
             for project in self.displayed_projects:
-                # project.startCallback = self.startDownloadDialog
-                # project.progressCallback = self.progressDownloadDialog
-                # project.completionCallback = self.completeDownloadDialog
+                project.startCallback = self.startDownloadDialog
+                project.progressCallback = self.progressDownloadDialog
+                project.completionCallback = self.completeDownloadDialog
                 project_widget = ProjectRow(project)
                 self.project_list_walker.append(project_widget)
                 urwid.connect_signal(project_widget, 'doubleclick', self.project_list.update_selected)
@@ -242,16 +242,13 @@ class BrowserApplication(object):
         return False
 
     def startDownloadDialog(self):
-        self.waitDialog = generic_widgets.WaitDialog(self.loop, "Downloading project")
-        self.loop.draw_screen()
+        self.waitDialog.threadedAttach()
 
     def progressDownloadDialog(self, metadata, progress):
-        # self.waitDialog.setText(self.waitDialog.getT)
-        pass
+        self.waitDialog.threaded_set_text("Downloading project\n" + str(progress*100) + "%")
 
     def completeDownloadDialog(self):
-        self.waitDialog.detach()
-        self.waitDialog = None
+        self.waitDialog.threadedDetach()
 
     def run(self):
         self.reload_projects()
