@@ -181,7 +181,7 @@ class BrowserApplication(object):
         "filter": "ctrl f"
     }
 
-    def __init__(self, palette, data_source=None):
+    def __init__(self, palette, project_filter=None, data_source=None):
         global global_loop
         self.data_source = data_source
         self.palette = palette
@@ -190,7 +190,10 @@ class BrowserApplication(object):
         global_loop = self.loop
         title_bar = urwid.AttrMap(urwid.Filler(urwid.Padding(urwid.Text("Projects")),'top'),'titlebar')
 
-        self.project_filter = mentor_dashboard.ProjectFilter()
+        if project_filter is None:
+            self.project_filter = mentor_dashboard.ProjectFilter()
+        else:
+            self.project_filter = project_filter
 
         self.project_list_walker = urwid.SimpleFocusListWalker([])
         self.project_list = RadioListbox(self.project_list_walker)
@@ -268,6 +271,9 @@ def main():
     parser = argparse.ArgumentParser(description='workspace switcher for springboard project submissions')
     parser.add_argument("--stdin", action="store_true",
                         help="Read dashboard data from STDIN")
+    parser.add_argument("--hide-older-than", metavar="DAYS", type=int,
+                        help="Hide submissions older than DAYS old")
+
     args = parser.parse_args()
 
     palette = DEFAULT_PALETTE
@@ -277,7 +283,16 @@ def main():
         os.dup2(sys.stdin.fileno(), 0)
     else:
         data_source = None
-    app = BrowserApplication(palette, data_source)
+
+    if args.hide_older_than:
+        project_filter = mentor_dashboard.RelativeProjectFilter(
+            days_ago=args.hide_older_than)
+    else:
+        project_filter = None
+    app = BrowserApplication(
+        palette,
+        project_filter=project_filter,
+        data_source=data_source)
     app.run()
 
 
