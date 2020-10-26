@@ -54,25 +54,6 @@ class FilterDialog(generic_widgets.PopupDialog):
             #     ('pack', urwid.Text(' to ')),
             #     # ('pack', generic_widgets.DateEdit())
             # )),
-
-            # urwid.Columns((
-            #     ('pack', urwid.Text("  ")),
-            #     generic_widgets.SelectorCarousel(["before", "before and including", "after", "after and including"]),
-            # )),
-            # urwid.Columns((
-            #     ('pack', urwid.Text("  [*] ")),
-            #     ('pack', urwid.Text("last ")),
-            #     generic_widgets.SelectorCarousel(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
-            # )),
-            # urwid.Columns((
-            #     ('pack', urwid.Text("  [ ] ")),
-            #     (2, urwid.IntEdit()),
-            #     ('pack', urwid.Text("/")),
-            #     (2, urwid.IntEdit()),
-            #     ('pack', urwid.Text("/")),
-            #     (4, urwid.IntEdit())
-            # )),
-
             urwid.Columns((filter_button, cancel_button))
         ))
 
