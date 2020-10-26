@@ -149,3 +149,116 @@ class MouseWheelListBox(urwid.ListBox):
             pass
         return super().mouse_event(size, event, button, col, row, focus)
 
+class SelectorCarousel(HighlightableListRow):
+    __metaclass__ = urwid.MetaSignals
+    signals = ["doubleclick", "click"]
+
+    def __init__(self, entries, focus_position=0):
+        self.entries = entries
+        self.position = focus_position
+        self.label_widget = urwid.Text("")
+        super().__init__(self.label_widget)
+        self.label_widget.set_text(self.carouselText(self.position))
+
+
+    def carouselText(self, position):
+        prev_entries = "." * self.position
+        post_entries = "." * (len(self.entries) - self.position - 1)
+        return (prev_entries + self.entries[self.position] +
+                post_entries)
+
+    def cycle(self, clockwise):
+        if clockwise:
+            self.position += 1
+            if self.position >= len(self.entries):
+                self.position = 0
+        else:
+            self.position -= 1
+            if self.position < 0:
+                self.position = len(self.entries) - 1
+        self.label_widget.set_text(self.carouselText(self.position))
+        urwid.emit_signal(self, "click")
+
+    def mouse_event(self, size, event, button, col, row, focus):
+        if button == 0:
+            self.cycle(True)
+            return True
+        return False
+
+    def keypress(self, size, key):
+        if key in ("enter", " "):
+            self.cycle(True)
+            return None
+        elif key == "left":
+            self.cycle(False)
+            return None
+        elif key == "right":
+            self.cycle(True)
+            return None
+        return key
+
+
+class FormatEdit(urwid.Text):
+    def __init__(self, format_string, background_text, initial_value=None):
+        # TODO initial value
+        super().__init__(background_text)
+        self.format_string = format_string
+        self.backgroundWidget = self
+        self.editWidget = urwid.Edit()
+        self.composeWidget = urwid.Overlay(
+            self.editWidget, self.backgroundWidget,
+            'left', len(background_text), 'middle', 1)
+
+    def render(self, size, focus):
+        return self.composeWidget.render((size[0],1), focus)
+
+class DateEdit(urwid.SelectableIcon):
+    def __init__(self, initial_value=None):
+        # TODO initial value
+        self.sep = "/"
+        self.internal_text = ""
+        super().__init__("MM/DD/YYYY")
+
+    def selectable(self):
+        return True
+
+    def updateText(self):
+        month = self.internal_text[:2].ljust(2, "M")
+        day = self.internal_text[2:4].ljust(2, "D")
+        year = self.internal_text[4:].ljust(4, "Y")
+        self.set_text(
+            month+self.sep+day+self.sep+year
+        )
+
+    def keypress(self, size, key):
+        if key in "0123456789":
+            if len(self.internal_text) < 8:
+                self.internal_text += key
+                self.updateText()
+                if len(self.internal_text) == 8:
+                    return 'right'
+            return None
+        elif key == "backspace":
+            if len(self.internal_text) == 0:
+                return 'left'
+            self.internal_text = self.internal_text[:-1]
+            self.updateText()
+            return None
+        return key
+
+    def get_cursor_coords(self, size):
+        if self._cursor_position > len(self.text):
+            return None
+        (maxcol,) = size
+        trans = self.get_line_translation(maxcol)
+        cursor_position = len(self.internal_text)
+        if cursor_position >= 2:
+            cursor_position += 1
+        if cursor_position >= 5:
+            cursor_position += 1
+        if cursor_position > 9:
+            cursor_position = 9
+        x, y = urwid.text_layout.calc_coords(self.text, trans, cursor_position)
+        if maxcol <= x:
+            return None
+        return x, y

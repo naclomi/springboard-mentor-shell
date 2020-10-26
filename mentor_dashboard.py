@@ -1,7 +1,9 @@
+import datetime
 import os
 
 import klembord
 from bs4 import BeautifulSoup
+import dateutil.parser
 
 import gdrive
 import shell_integration
@@ -17,6 +19,48 @@ def extractLinks(cell_node):
         links[link_node.get_text()] = link_node.get("href")
     return links
 
+
+def toDatetime(cell_node):
+    return dateutil.parser.parse(cell_node.get_text())
+
+
+class ProjectFilter(object):
+    def __init__(self):
+        pass
+
+    def filter(self, project_list):
+        return project_list
+
+
+class RangedProjectFilter(ProjectFilter):
+    def __init__(self, start_range, end_range):
+        self.start_range = start_range
+        self.end_range = end_range
+
+    def filter(self, project_list):
+        filtered_projects = []
+        for project in project_list:
+            if self.start_range is not None and project.date < self.start_range:
+                continue
+            if self.end_range is not None and project.date > self.end_range:
+                continue
+            filtered_projects.append(project)
+        return filtered_projects
+
+
+class RelativeProjectFilter(RangedProjectFilter):
+    def __init__(self, days_ago, today=None):
+        self.days_ago = days_ago
+        if today is None:
+            today = datetime.datetime.now()
+            # Round off the non-date portion of the time:
+            today = datetime.datetime(*today.timetuple()[:3])
+        super().__init__(
+            today - datetime.timedelta(days=days_ago),
+            None
+        )
+
+
 class Project(object):
 
     column_names = ["unit", "name", "date", "work", "rubric", "solution", "grade"]
@@ -24,7 +68,8 @@ class Project(object):
         "name": extractLinks,
         "work": extractLinks,
         "rubric": extractLinks,
-        "solution": extractLinks
+        "solution": extractLinks,
+        "date": toDatetime,
     }
 
     def __init__(self, row_node,

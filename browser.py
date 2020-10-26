@@ -19,9 +19,83 @@ DEFAULT_PALETTE = (
 global_loop = None
 
 class FilterDialog(generic_widgets.PopupDialog):
-    def __init__(self, loop, attach=True):
-        widget = urwid.Filler(urwid.Padding(urwid.Text("Filter\nShow projects from:\nafter last [Wednsday]")))
-        super().__init__(loop, widget, attach, 40, 40)
+    def __init__(self, loop, initial_filter, set_filter_callback, attach=True):
+        self.filter = initial_filter
+        self.set_filter_callback = set_filter_callback
+
+        filter_button = generic_widgets.HighlightableListRow(urwid.Text("[Filter]"))
+        urwid.connect_signal(filter_button, 'click', self.filter_callback)
+        urwid.connect_signal(filter_button, 'doubleclick', self.filter_callback)
+
+        cancel_button = generic_widgets.HighlightableListRow(urwid.Text("[Cancel]"))
+        urwid.connect_signal(cancel_button, 'click', self.detach)
+        urwid.connect_signal(cancel_button, 'doubleclick', self.detach)
+
+        filter_group = []
+        self.radios = {
+            "show all": urwid.RadioButton(filter_group, "Show all"),
+            "hide relative": urwid.RadioButton(filter_group, "Hide submissions")
+        }
+        self.days_ago_entry = urwid.IntEdit(default=7 )
+
+        # TODO: load from current settings
+        widget = urwid.Pile((
+            self.radios["show all"],
+            self.radios["hide relative"],
+            urwid.Columns((
+                ('pack', urwid.Text("      more than ")),
+                (3, self.days_ago_entry),
+                ('pack', urwid.Text("days old")),
+            )),
+            # urwid.RadioButton(filter_group, "Show submissions from"),
+            # urwid.Columns((
+            #     ('pack', urwid.Text('      ')),
+            #     ('pack', generic_widgets.FormatEdit("##_##_####", "MM/DD/YYYY")),
+            #     ('pack', urwid.Text(' to ')),
+            #     # ('pack', generic_widgets.DateEdit())
+            # )),
+
+            # urwid.Columns((
+            #     ('pack', urwid.Text("  ")),
+            #     generic_widgets.SelectorCarousel(["before", "before and including", "after", "after and including"]),
+            # )),
+            # urwid.Columns((
+            #     ('pack', urwid.Text("  [*] ")),
+            #     ('pack', urwid.Text("last ")),
+            #     generic_widgets.SelectorCarousel(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+            # )),
+            # urwid.Columns((
+            #     ('pack', urwid.Text("  [ ] ")),
+            #     (2, urwid.IntEdit()),
+            #     ('pack', urwid.Text("/")),
+            #     (2, urwid.IntEdit()),
+            #     ('pack', urwid.Text("/")),
+            #     (4, urwid.IntEdit())
+            # )),
+
+            urwid.Columns((filter_button, cancel_button))
+        ))
+
+        self.set_defaults()
+        super().__init__(loop, widget, attach, 40)
+
+    def set_defaults(self):
+        self.radios["show all"].set_state(
+            type(self.filter) is mentor_dashboard.ProjectFilter, do_callback=False)
+        self.radios["hide relative"].set_state(
+            type(self.filter) is mentor_dashboard.RelativeProjectFilter, do_callback=False)
+        if self.radios["hide relative"].state is True:
+            self.days_ago_entry.set_edit_text(str(self.filter.days_ago))
+
+    def filter_callback(self):
+        new_filter = mentor_dashboard.ProjectFilter()
+        if self.radios["show all"].state is True:
+            pass
+        elif self.radios["hide relative"].state is True:
+            new_filter = mentor_dashboard.RelativeProjectFilter(self.days_ago_entry.value())
+        self.set_filter_callback(new_filter)
+        self.detach()
+
 
 class OperationsPopup(generic_widgets.PopupDialog):
     def __init__(self, loop, project, attach=True):
@@ -73,6 +147,7 @@ class OperationsPopup(generic_widgets.PopupDialog):
         self.detach()
 
 class ProjectRow(generic_widgets.HighlightableListRow):
+    DATE_FORMAT = "%b %-d %Y"
     def __init__(self, project):
         self.project = project
         self.selected_indicator_widget = urwid.Text("")
@@ -81,7 +156,7 @@ class ProjectRow(generic_widgets.HighlightableListRow):
             ('pack', self.selected_indicator_widget),
             ('pack', urwid.Text(project.unit)),
             ('weight', 70, urwid.Text(project.name)),
-            ('pack', urwid.Text(project.date))
+            ('pack', urwid.Text(project.date.strftime(self.DATE_FORMAT)))
         ], dividechars=1)
         super().__init__(cells)
 
@@ -134,6 +209,8 @@ class BrowserApplication(object):
         global_loop = self.loop
         title_bar = urwid.AttrMap(urwid.Filler(urwid.Padding(urwid.Text("Projects")),'top'),'titlebar')
 
+        self.project_filter = mentor_dashboard.ProjectFilter()
+
         self.project_list_walker = urwid.SimpleFocusListWalker([])
         self.project_list = RadioListbox(self.project_list_walker)
         self.loop.widget = urwid.Pile((
@@ -142,12 +219,16 @@ class BrowserApplication(object):
         ))
         self.waitDialog = None
 
+    def set_filter(self, new_filter):
+        self.project_filter = new_filter
+        self.update_project_ui()
+
     def poll_clipboard(self, loop, unused=None):
         success = False
         clipboard_result = mentor_dashboard.getHTMLFromClipboard()
         if clipboard_result is not None:
-            success = self.update_project_ui(clipboard_result)
             self.projects = mentor_dashboard.getProjectsFromHTML(clipboard_result)
+            success = self.update_project_ui()
         if success:
             if self.waitDialog is not None:
                 self.waitDialog.detach()
@@ -162,12 +243,14 @@ class BrowserApplication(object):
         if self.data_source is None:
             self.poll_clipboard(self.loop)
         else:
-            self.update_project_ui(self.data_source)
+            self.projects = mentor_dashboard.getProjectsFromHTML(self.data_source)
+            self.update_project_ui()
 
-    def update_project_ui(self, html):
-        self.projects = mentor_dashboard.getProjectsFromHTML(html)
+    def update_project_ui(self):
+        self.project_list_walker.clear()
+        self.displayed_projects = self.project_filter.filter(self.projects)
         if len(self.projects) > 0:
-            for project in self.projects:
+            for project in self.displayed_projects:
                 # project.startCallback = self.startDownloadDialog
                 # project.progressCallback = self.progressDownloadDialog
                 # project.completionCallback = self.completeDownloadDialog
@@ -176,7 +259,6 @@ class BrowserApplication(object):
                 urwid.connect_signal(project_widget, 'doubleclick', self.project_list.update_selected)
             return True
         return False
-
 
     def startDownloadDialog(self):
         self.waitDialog = generic_widgets.WaitDialog(self.loop, "Downloading project")
@@ -199,7 +281,7 @@ class BrowserApplication(object):
             self.reload_projects()
             return None
         if key == self.HOTKEYS["filter"]:
-            FilterDialog(self.loop)
+            FilterDialog(self.loop, self.project_filter, self.set_filter)
         if key in ('q', 'Q'):
             raise urwid.ExitMainLoop()
 
