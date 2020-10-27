@@ -30,9 +30,9 @@ wait_on_file() {
     inotifywait -q -e modify $1 >/dev/null;
 }
 
-bash_killswitch(){
+shell_killswitch(){
     wait_on_file $WATCH_FILE;
-    kill $current_bash_pid;
+    kill $current_shell_pid;
 }
 
 pid_to_jobspec(){
@@ -44,9 +44,9 @@ run_loop() {
     do
         new_dir=`cat $WATCH_FILE`;
         pushd $new_dir && \
-            { bash & export current_bash_pid=$!; } &&
+            { $SHELL & export current_shell_pid=$!; } &&
             popd &&
-            { bash_killswitch & fg `pid_to_jobspec $current_bash_pid`; }
+            { shell_killswitch & fg `pid_to_jobspec $current_shell_pid`; }
     done
 }
 
