@@ -310,12 +310,13 @@ def main():
         palette,
         project_filter=project_filter,
         data_source=data_source)
-    app.run()
+    try:
+        app.run()
+    except KeyboardInterrupt:
+        pass
+    shell_integration.syncShells("")
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        pass
+    main()
     sys.exit(0)

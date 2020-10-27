@@ -43,7 +43,7 @@ run_loop() {
     while [ -s $WATCH_FILE ]
     do
         new_dir=`cat $WATCH_FILE`;
-        pushd $new_dir && \
+        pushd "$new_dir" && \
             { $SHELL & export current_shell_pid=$!; } &&
             popd &&
             { shell_killswitch & fg `pid_to_jobspec $current_shell_pid`; }

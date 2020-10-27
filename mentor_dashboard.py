@@ -124,6 +124,10 @@ class Project(object):
             local_uris = self.getLocalURIs()
             for uri in local_uris.values():
                 self.openContexts.extend(shell_integration.openAllFiles(uri))
+            # TODO figure out how to handle multiple uris here rather than
+            #   just opening the last one:
+            if os.path.isdir(uri):
+                shell_integration.syncShells(uri)
             if openCompletionCallback is not None:
                 openCompletionCallback()
         threading.Thread(target=body).start()

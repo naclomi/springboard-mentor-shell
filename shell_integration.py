@@ -101,6 +101,11 @@ def openLink(url):
     GnomeGeneric.open(None, [url])
 
 
+def syncShells(new_path):
+    with open(".springboard_active_directory", "w") as f:
+        f.write(new_path)
+
+
 def openFolder(uri):
     GnomeGeneric.open(None, [uri])
 
