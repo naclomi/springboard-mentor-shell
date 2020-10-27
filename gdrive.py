@@ -12,14 +12,21 @@ import shell_integration
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
 
+# TODO: handle other working directories
+SRC_DIR = os.path.dirname(os.path.realpath(__file__))
+CREDENTIALS_FILE = os.path.join(SRC_DIR, 'gdrive_springboard_credentials.json')
+TOKEN_FILE = os.path.join(SRC_DIR, 'gdrive_springboard_token.pickle')
+
+DEFAULT_GDRIVE_CLIENT = None
+
 # TODO: Curses-ify
-def initGDrive():
+def initGDrive(token_file=TOKEN_FILE, credentials_file=CREDENTIALS_FILE):
     creds = None
     # The file token.pickle stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
     # time.
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
+    if os.path.exists(token_file):
+        with open(token_file, 'rb') as token:
             creds = pickle.load(token)
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
@@ -27,14 +34,21 @@ def initGDrive():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
+                credentials_file, SCOPES)
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
-        with open('token.pickle', 'wb') as token:
+        with open(token_file, 'wb') as token:
             pickle.dump(creds, token)
 
     service = build('drive', 'v3', credentials=creds)
     return service
+
+
+def defaultClient():
+    global DEFAULT_GDRIVE_CLIENT
+    if DEFAULT_GDRIVE_CLIENT is None:
+        DEFAULT_GDRIVE_CLIENT = initGDrive()
+    return DEFAULT_GDRIVE_CLIENT
 
 
 def downloadGDriveFile(drive_service, file_id, local_path, exportMIMEType=None, metadata=None, progressCallback=None):
@@ -108,15 +122,10 @@ def downloadGdriveFolder(drive_service, dir_id, cwd, progressCallback=None):
 GDRIVE_URL_PARSER = re.compile(r"(?:https?://)?"
                                r"(?:[^.]*).google.com/(?:drive/)?"
                                r"([A-Za-z]*)/(?:d/)?([^/?]+)")
-DEFAULT_GDRIVE_CLIENT = None
-
 
 def downloadGoogleURL(url, cwd=os.getcwd(), dirname=None, progressCallback=None, drive_service=None):
-    global DEFAULT_GDRIVE_CLIENT
     if drive_service is None:
-        if DEFAULT_GDRIVE_CLIENT is None:
-            DEFAULT_GDRIVE_CLIENT = initGDrive()
-        drive_service = DEFAULT_GDRIVE_CLIENT
+        drive_service = defaultClient()
 
     result = None
     match = GDRIVE_URL_PARSER.match(url)

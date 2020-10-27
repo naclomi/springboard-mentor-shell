@@ -102,7 +102,7 @@ def openLink(url):
 
 
 def syncShells(new_path):
-    with open(".springboard_active_directory", "w") as f:
+    with open("/tmp/springboard_active_directory", "w") as f:
         f.write(new_path)
 
 
@@ -112,3 +112,7 @@ def openFolder(uri):
 
 def copyText(text):
     klembord.set_text(text)
+
+
+def getHTMLFromClipboard():
+    return klembord.get(['text/html'])['text/html']

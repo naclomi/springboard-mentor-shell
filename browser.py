@@ -152,7 +152,7 @@ class ProjectRow(generic_widgets.HighlightableListRow):
         self.set_selected(False)
         cells = urwid.Columns([
             ('pack', self.selected_indicator_widget),
-            ('pack', urwid.Text(project.unit)),
+            ('pack', urwid.Text(project.unit.ljust(5))),
             ('weight', 70, urwid.Text(project.name)),
             ('pack', urwid.Text(project.date.strftime(self.DATE_FORMAT)))
         ], dividechars=1)
@@ -198,10 +198,13 @@ class BrowserApplication(object):
         "filter": "ctrl f"
     }
 
-    def __init__(self, palette, project_filter=None, data_source=None):
+    def __init__(self, palette, working_dir=None, project_filter=None, data_source=None):
         global global_loop
         self.data_source = data_source
         self.palette = palette
+        self.working_dir = working_dir
+        if self.working_dir is None:
+            self.working_dir = os.path.join(os.getcwd(), "downloads")
         self.loop = urwid.MainLoop(None, self.palette,
                                    unhandled_input=self.global_input)
         global_loop = self.loop
@@ -218,7 +221,8 @@ class BrowserApplication(object):
             (1, title_bar),
             self.project_list
         ))
-        self.waitDialog = generic_widgets.WaitDialog(self.loop, "Downloading project", attach=False, threadable=True)
+        self.waitDialog = None
+        self.downloadDialog = generic_widgets.WaitDialog(self.loop, "Downloading project", attach=False, threadable=True)
 
     def set_filter(self, new_filter):
         self.project_filter = new_filter
@@ -226,9 +230,9 @@ class BrowserApplication(object):
 
     def poll_clipboard(self, loop, unused=None):
         success = False
-        clipboard_result = mentor_dashboard.getHTMLFromClipboard()
+        clipboard_result = shell_integration.getHTMLFromClipboard()
         if clipboard_result is not None:
-            self.projects = mentor_dashboard.getProjectsFromHTML(clipboard_result)
+            self.projects = mentor_dashboard.getProjectsFromHTML(clipboard_result, self.working_dir)
             success = self.update_project_ui()
         if success:
             if self.waitDialog is not None:
@@ -244,7 +248,7 @@ class BrowserApplication(object):
         if self.data_source is None:
             self.poll_clipboard(self.loop)
         else:
-            self.projects = mentor_dashboard.getProjectsFromHTML(self.data_source)
+            self.projects = mentor_dashboard.getProjectsFromHTML(self.data_source, self.working_dir)
             self.update_project_ui()
 
     def update_project_ui(self):
@@ -262,13 +266,13 @@ class BrowserApplication(object):
         return False
 
     def startDownloadDialog(self):
-        self.waitDialog.threadedAttach()
+        self.downloadDialog.threadedAttach()
 
     def progressDownloadDialog(self, metadata, progress):
-        self.waitDialog.threaded_set_text("Downloading project\n" + str(progress*100) + "%")
+        self.downloadDialog.threaded_set_text("Downloading project\n" + str(progress*100) + "%")
 
     def completeDownloadDialog(self):
-        self.waitDialog.threadedDetach()
+        self.downloadDialog.threadedDetach()
 
     def run(self):
         self.reload_projects()
@@ -290,6 +294,8 @@ def main():
                         help="Read dashboard data from STDIN")
     parser.add_argument("--hide-older-than", metavar="DAYS", type=int,
                         help="Hide submissions older than DAYS old")
+    parser.add_argument("--working-dir", metavar="DOWNLOADS_DIR", type=str,
+                        help="Directory to use for downloads and settings")
 
     args = parser.parse_args()
 
@@ -306,10 +312,16 @@ def main():
             days_ago=args.hide_older_than)
     else:
         project_filter = None
+
+    if args.working_dir is not None:
+        args.working_dir = os.path.abspath(args.working_dir)
+
     app = BrowserApplication(
         palette,
         project_filter=project_filter,
+        working_dir=args.working_dir,
         data_source=data_source)
+
     try:
         app.run()
     except KeyboardInterrupt:

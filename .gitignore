@@ -1,4 +1,4 @@
-credentials.json
-token.pickle
+*credentials.json
+*token.pickle
 downloads/*
 **/__pycache__/

@@ -1,7 +1,6 @@
 import datetime
 import os
 
-import klembord
 from bs4 import BeautifulSoup
 import dateutil.parser
 
@@ -9,8 +8,6 @@ import gdrive
 import shell_integration
 import threading
 
-def getHTMLFromClipboard():
-    return klembord.get(['text/html'])['text/html']
 
 def extractLinks(cell_node):
     links = {}
@@ -72,8 +69,9 @@ class Project(object):
         "date": toDatetime,
     }
 
-    def __init__(self, row_node,
+    def __init__(self, row_node, working_dir="/tmp",
                  startCallback=None, progressCallback=None, completionCallback=None):
+        self.working_dir = working_dir
         cells = row_node.find_all("td", recursve=False)
         if len(cells) != len(Project.column_names):
             raise Exception()
@@ -93,9 +91,7 @@ class Project(object):
 
     def getLocalURIs(self):
         local_uris = {}
-        # TODO: parameterize
-        download_dir = os.path.join(os.getcwd(), "downloads")
-        project_dir = os.path.join(download_dir, "%s %s" % (
+        project_dir = os.path.join(self.working_dir, "%s %s" % (
             self.unit, shell_integration.sanitizeFilesystemName(self.name)))
         for link_name, link in self.work.items():
             link_dir = os.path.join(project_dir, shell_integration.sanitizeFilesystemName(link_name))
@@ -105,7 +101,7 @@ class Project(object):
                 if self.startCallback is not None:
                     self.startCallback()
                 result = gdrive.downloadGoogleURL(
-                    link, cwd=download_dir, dirname=link_dir,
+                    link, cwd=self.working_dir, dirname=link_dir,
                     progressCallback=self.progressCallback)
                 if self.completionCallback is not None:
                     self.completionCallback()
@@ -133,13 +129,13 @@ class Project(object):
         threading.Thread(target=body).start()
 
 
-def getProjectsFromHTML(html):
+def getProjectsFromHTML(html, working_dir):
     projects = []
     parsed_result = BeautifulSoup(html, 'html.parser')
     rows = parsed_result.find_all("tr")
     for row in rows:
         try:
-            project = Project(row)
+            project = Project(row, working_dir=working_dir)
             projects.append(project)
         except Exception:
             pass
