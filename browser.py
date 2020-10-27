@@ -47,6 +47,7 @@ class FilterDialog(generic_widgets.PopupDialog):
                 (3, self.days_ago_entry),
                 ('pack', urwid.Text("days old")),
             )),
+            # TODO:
             # urwid.RadioButton(filter_group, "Show submissions from"),
             # urwid.Columns((
             #     ('pack', urwid.Text('      ')),
@@ -82,6 +83,8 @@ class OperationsPopup(generic_widgets.PopupDialog):
     def __init__(self, loop, project, attach=True):
         self.project = project
         self.operations = [
+            ("Open local folder", self.openLocalUris),
+            ("Copy local path to clipboard", self.uriToClipboard),
             ("Open assignment page", self.openAssignmentPage),
             ("Open submission links", self.openWorkLinks)
         ]
@@ -126,6 +129,20 @@ class OperationsPopup(generic_widgets.PopupDialog):
         for link in self.project.work.values():
             shell_integration.openLink(link)
         self.detach()
+
+    def openLocalUris(self, *args, **kwargs):
+        for uri in self.project.getLocalURIs().values():
+            shell_integration.openFolder(uri)
+        self.detach()
+
+    def uriToClipboard(self, *args, **kwargs):
+        uris = []
+        for uri in self.project.getLocalURIs().values():
+            uris.append(uri)
+        uris = ";".join(uris)
+        shell_integration.copyText(uris)
+        self.detach()
+
 
 class ProjectRow(generic_widgets.HighlightableListRow):
     DATE_FORMAT = "%b %-d %Y"

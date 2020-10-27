@@ -152,11 +152,3 @@ def downloadGoogleURL(url, cwd=os.getcwd(), dirname=None, progressCallback=None,
             raise ValueError("Invalid Google Drive URL '%s'" % url)
     return result
 
-# def updateConsole(metadata, progress):
-#     print("Downloading %s %d%%" % (metadata["name"], int(progress * 100)))
-# if __name__ == '__main__':
-    # drive_service = initGDrive()
-    # directory_tree = downloadGdriveFolder(
-    #     drive_service, '1OQbICBKY4I2QXN9HDsrIJreUcjq3qKGZ',
-    #     progressCallback=updateConsole)
-    # print(directory_tree)

@@ -1,3 +1,4 @@
+import klembord
 import os
 import shutil
 import subprocess
@@ -93,7 +94,16 @@ def openAllFiles(fs_root):
         openContexts.append(GnomeGeneric.open(fs_root, file_lists["pdf"]))
     return openContexts
 
+
 def openLink(url):
     if not url.startswith("http"):
         url = "http://" + url
     GnomeGeneric.open(None, [url])
+
+
+def openFolder(uri):
+    GnomeGeneric.open(None, [uri])
+
+
+def copyText(text):
+    klembord.set_text(text)
