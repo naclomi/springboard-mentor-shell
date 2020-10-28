@@ -15,9 +15,9 @@ DEFAULT_PALETTE = (
     ('list_selected', urwid.BLACK, urwid.LIGHT_GRAY)
 )
 
-# TODO: strip leading/trailing whitespace from project fields
 # TODO: find another way to do this
 global_loop = None
+
 
 class FilterDialog(generic_widgets.PopupDialog):
     def __init__(self, loop, initial_filter, set_filter_callback, attach=True):

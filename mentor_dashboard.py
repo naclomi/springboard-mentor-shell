@@ -80,7 +80,7 @@ class Project(object):
             if col_name in Project.column_parsers:
                 col_value = Project.column_parsers[col_name](cell)
             else:
-                col_value = cell.get_text()
+                col_value = cell.get_text().strip()
             setattr(self, col_name, col_value)
         self.projectLinks = self.name
         self.name = " ".join(self.projectLinks.keys())
