@@ -32,7 +32,7 @@ wait_on_file() {
 
 shell_killswitch(){
     wait_on_file $WATCH_FILE;
-    kill $current_shell_pid;
+    kill -9 $current_shell_pid;
 }
 
 pid_to_jobspec(){
@@ -49,7 +49,6 @@ run_loop() {
             { shell_killswitch & fg `pid_to_jobspec $current_shell_pid`; }
     done
 }
-
 
 run_loop
 
