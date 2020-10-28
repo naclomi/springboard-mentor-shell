@@ -27,7 +27,7 @@ class PopupDialog(urwid.Overlay):
         if height is None:
             height = 'pack'
         if self.threadable:
-            self.thread_pipe = self.loop.watch_pipe(self.threadSignalCallback)
+            self.thread_pipe = self.loop.watch_pipe(self.rawThreadSignalCallback)
         super().__init__(urwid.LineBox(internal_widget), self.original_widget, 'center', width, 'middle', height)
         if attach:
             self.attach()
@@ -47,23 +47,32 @@ class PopupDialog(urwid.Overlay):
             return True
         return False
 
-    def threadSignalCallback(self, data):
-        if data == b"detach":
+    def rawThreadSignalCallback(self, data):
+        commands = data.split(b"\n")
+        for command in commands:
+            if command == b"":
+                continue
+            self.threadSignalCallback(command)
+
+    def threadSignalCallback(self, command):
+        if command == b"detach":
             self.detach()
-        elif data == b"attach":
+        elif command == b"attach":
             self.attach()
+        else:
+            raise Exception("Unrecognized command '%s'" % command)
         self.loop.draw_screen()
         return True
 
     def threadedAttach(self):
         if not self.threadable:
             raise Exception("Popup is not threadable")
-        os.write(self.thread_pipe, b"attach")
+        os.write(self.thread_pipe, b"attach\n")
 
     def threadedDetach(self):
         if not self.threadable:
             raise Exception("Popup is not threadable")
-        os.write(self.thread_pipe, b"detach")
+        os.write(self.thread_pipe, b"detach\n")
 
     def selectable(self):
         return True
@@ -101,14 +110,14 @@ class WaitDialog(PopupDialog):
         if not self.threadable:
             raise Exception("Popup is not threadable")
         self.threadedNextText.append((args, kwargs))
-        os.write(self.thread_pipe, b"set text")
+        os.write(self.thread_pipe, b"set text\n")
 
-    def threadSignalCallback(self, data):
-        if data == b"set text":
+    def threadSignalCallback(self, command):
+        if command == b"set text":
             args, kwargs = self.threadedNextText.pop(0)
             self.set_text(*args, **kwargs)
         else:
-            super().threadSignalCallback(data)
+            super().threadSignalCallback(command)
         return True
 
     def attach(self):

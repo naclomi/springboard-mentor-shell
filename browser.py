@@ -15,6 +15,7 @@ DEFAULT_PALETTE = (
     ('list_selected', urwid.BLACK, urwid.LIGHT_GRAY)
 )
 
+# TODO: strip leading/trailing whitespace from project fields
 # TODO: find another way to do this
 global_loop = None
 
@@ -275,6 +276,7 @@ class BrowserApplication(object):
         self.downloadDialog.threadedDetach()
 
     def run(self):
+        shell_integration.syncShells(self.working_dir)
         self.reload_projects()
         self.loop.run()
 
