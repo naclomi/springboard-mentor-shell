@@ -69,9 +69,10 @@ class Project(object):
         "date": toDatetime,
     }
 
-    def __init__(self, row_node, working_dir="/tmp",
+    def __init__(self, row_node, download_client, working_dir="/tmp",
                  startCallback=None, progressCallback=None, completionCallback=None):
         self.working_dir = working_dir
+        self.download_client = download_client
         cells = row_node.find_all("td", recursve=False)
         if len(cells) != len(Project.column_names):
             raise Exception()
@@ -100,7 +101,7 @@ class Project(object):
             else:
                 if self.startCallback is not None:
                     self.startCallback()
-                result = gdrive.downloadGoogleURL(
+                result = self.download_client.downloadURL(
                     link, cwd=self.working_dir, dirname=link_dir,
                     progressCallback=self.progressCallback)
                 if self.completionCallback is not None:
@@ -129,13 +130,13 @@ class Project(object):
         threading.Thread(target=body).start()
 
 
-def getProjectsFromHTML(html, working_dir):
+def getProjectsFromHTML(html, *args, **kwargs):
     projects = []
     parsed_result = BeautifulSoup(html, 'html.parser')
     rows = parsed_result.find_all("tr")
     for row in rows:
         try:
-            project = Project(row, working_dir=working_dir)
+            project = Project(row, *args, **kwargs)
             projects.append(project)
         except Exception:
             pass

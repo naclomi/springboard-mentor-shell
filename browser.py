@@ -2,12 +2,13 @@
 import argparse
 import os
 import sys
-import time
+
 import urwid
 
 import mentor_dashboard
 import shell_integration
 import generic_widgets
+import gdrive
 
 DEFAULT_PALETTE = (
     ('titlebar', urwid.BLACK, urwid.LIGHT_GRAY),
@@ -18,6 +19,64 @@ DEFAULT_PALETTE = (
 # TODO: find another way to do this
 global_loop = None
 
+class InitializeGdriveClient(generic_widgets.PopupDialog):
+    def __init__(self, loop, client, completionCallback=None, failureCallback=None):
+        self.completionCallback = completionCallback
+        self.failureCallback = failureCallback
+        if not client.initialized():
+            if not client.initialize(attemptAuthorization=False):
+                self.client = client
+
+                continue_button = generic_widgets.HighlightableListRow(urwid.Text("[Continue]"))
+                urwid.connect_signal(continue_button, 'click', self.begin)
+                urwid.connect_signal(continue_button, 'doubleclick', self.begin)
+
+                cancel_button = generic_widgets.HighlightableListRow(urwid.Text("[Cancel]"))
+                urwid.connect_signal(cancel_button, 'click', self.detach)
+                urwid.connect_signal(cancel_button, 'doubleclick', self.detach)
+                
+                self.label = urwid.Text(
+                    "To download files from your Google Drive, you "
+                    "must first authorize this application to access "
+                    "your account. Select 'continue' to begin this "
+                    "authorization process.\n")
+
+                self.buttons = urwid.Columns((continue_button, cancel_button))
+
+                widget = urwid.Pile((
+                    self.label,
+                    self.buttons
+                ))
+                super().__init__(loop, widget, True, 65)
+            else:
+                if self.completionCallback is not None:
+                    self.completionCallback()
+        else:
+            if self.completionCallback is not None:
+                self.completionCallback()
+
+    def fail(self, failure_text):
+        self.label.set_text(failure_text)
+        ok_button = generic_widgets.HighlightableListRow(urwid.Text("[Ok]"))
+        urwid.connect_signal(ok_button, 'click', self.detach)
+        urwid.connect_signal(ok_button, 'doubleclick', self.detach)
+        self.buttons.contents = ((ok_button, self.buttons.options('pack')),)
+        if self.failureCallback is not None:
+            self.failureCallback()
+
+    def begin(self):
+        try:
+            self.loop.stop()
+            self.client.initialize()
+            self.loop.start()
+            self.detach()
+            if self.completionCallback is not None:
+                self.completionCallback()
+        except FileNotFoundError:
+            self.fail(
+                "Could not find credentials file in:\n\n%s\n\n"
+                "Please put your Google Cloud API credentials "
+                "in this location and try again.\n" % self.client.credentials_file)
 
 class FilterDialog(generic_widgets.PopupDialog):
     def __init__(self, loop, initial_filter, set_filter_callback, attach=True):
@@ -132,17 +191,25 @@ class OperationsPopup(generic_widgets.PopupDialog):
         self.detach()
 
     def openLocalUris(self, *args, **kwargs):
-        for uri in self.project.getLocalURIs().values():
-            shell_integration.openFolder(uri)
+        def completion():
+            for uri in self.project.getLocalURIs().values():
+                shell_integration.openFolder(uri)
         self.detach()
+        InitializeGdriveClient(
+            self.loop, self.project.download_client,
+            completionCallback=completion)
 
     def uriToClipboard(self, *args, **kwargs):
-        uris = []
-        for uri in self.project.getLocalURIs().values():
-            uris.append(uri)
-        uris = ";".join(uris)
-        shell_integration.copyText(uris)
+        def completion():
+            uris = []
+            for uri in self.project.getLocalURIs().values():
+                uris.append(uri)
+            uris = ";".join(uris)
+            shell_integration.copyText(uris)
         self.detach()
+        InitializeGdriveClient(
+            self.loop, self.project.download_client,
+            completionCallback=completion)
 
 
 class ProjectRow(generic_widgets.HighlightableListRow):
@@ -166,10 +233,15 @@ class ProjectRow(generic_widgets.HighlightableListRow):
         return super().keypress(size, key)
 
     def set_selected(self, value):
+        global global_loop
         self.selected = value
         self.selected_indicator_widget.set_text("[%s]" % ("*" if value else " "))
         if value is True:
-            self.project.open()
+            def completion():
+                self.project.open()
+            InitializeGdriveClient(
+                global_loop, self.project.download_client,
+                completionCallback=completion)
         else:
             self.project.close()
 
@@ -199,11 +271,13 @@ class BrowserApplication(object):
         "filter": "ctrl f"
     }
 
-    def __init__(self, palette, working_dir=None, project_filter=None, data_source=None):
+    def __init__(self, palette, working_dir, gdrive_client, project_filter, data_source):
         global global_loop
         self.data_source = data_source
         self.palette = palette
         self.working_dir = working_dir
+        self.gdrive_client = gdrive_client
+
         if self.working_dir is None:
             self.working_dir = os.path.join(os.getcwd(), "downloads")
         self.loop = urwid.MainLoop(None, self.palette,
@@ -215,6 +289,7 @@ class BrowserApplication(object):
             self.project_filter = mentor_dashboard.ProjectFilter()
         else:
             self.project_filter = project_filter
+
 
         self.project_list_walker = urwid.SimpleFocusListWalker([])
         self.project_list = RadioListbox(self.project_list_walker)
@@ -249,7 +324,14 @@ class BrowserApplication(object):
         if self.data_source is None:
             self.poll_clipboard(self.loop)
         else:
-            self.projects = mentor_dashboard.getProjectsFromHTML(self.data_source, self.working_dir)
+            self.projects = mentor_dashboard.getProjectsFromHTML(
+                self.data_source,
+                download_client=self.gdrive_client,
+                working_dir=self.working_dir,
+                startCallback=self.startDownloadDialog,
+                progressCallback=self.progressDownloadDialog,
+                completionCallback=self.completeDownloadDialog
+            )
             self.update_project_ui()
 
     def update_project_ui(self):
@@ -257,9 +339,6 @@ class BrowserApplication(object):
         self.displayed_projects = self.project_filter.filter(self.projects)
         if len(self.projects) > 0:
             for project in self.displayed_projects:
-                project.startCallback = self.startDownloadDialog
-                project.progressCallback = self.progressDownloadDialog
-                project.completionCallback = self.completeDownloadDialog
                 project_widget = ProjectRow(project)
                 self.project_list_walker.append(project_widget)
                 urwid.connect_signal(project_widget, 'doubleclick', self.project_list.update_selected)
@@ -294,6 +373,12 @@ def main():
     parser = argparse.ArgumentParser(description='workspace switcher for springboard project submissions')
     parser.add_argument("--stdin", action="store_true",
                         help="Read dashboard data from STDIN")
+    parser.add_argument("--gdrive-credentials", metavar="CREDENTIALS_JSON_FILE", type=str,
+                        default=gdrive.GdriveClient.CREDENTIALS_FILE,
+                        help="Path to JSON file containing GDrive API credentials. Default is \"%s\"" % gdrive.GdriveClient.CREDENTIALS_FILE)
+    parser.add_argument("--gdrive-token", metavar="TOKEN_FILE", type=str,
+                        default=gdrive.GdriveClient.TOKEN_FILE,
+                        help="Path to GDrive API token file. Default is \"%s\"" % gdrive.GdriveClient.TOKEN_FILE)
     parser.add_argument("--hide-older-than", metavar="DAYS", type=int,
                         help="Hide submissions older than DAYS old")
     parser.add_argument("--working-dir", metavar="DOWNLOADS_DIR", type=str,
@@ -318,8 +403,14 @@ def main():
     if args.working_dir is not None:
         args.working_dir = os.path.abspath(args.working_dir)
 
+    gdrive_client = gdrive.GdriveClient(
+        token_file=args.gdrive_token,
+        credentials_file=args.gdrive_credentials,
+    )
+
     app = BrowserApplication(
         palette,
+        gdrive_client=gdrive_client,
         project_filter=project_filter,
         working_dir=args.working_dir,
         data_source=data_source)
