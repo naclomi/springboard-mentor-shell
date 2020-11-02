@@ -307,3 +307,16 @@ class DateEdit(urwid.SelectableIcon):
         if maxcol <= x:
             return None
         return x, y
+
+class ToolbarButton(urwid.LineBox):
+    __metaclass__ = urwid.MetaSignals
+    signals = ["click"]
+
+    def __init__(self, label):
+        return super().__init__(urwid.Filler(urwid.Text(label)))
+
+    def mouse_event(self, size, event, button, col, row, focus):
+        if event.endswith("mouse release") and button == 0:
+            urwid.emit_signal(self, "click")
+            return True
+        return super().mouse_event(size, event, button, col, row, focus)

@@ -16,9 +16,6 @@ DEFAULT_PALETTE = (
     ('list_selected', urwid.BLACK, urwid.LIGHT_GRAY)
 )
 
-# TODO: find another way to do this
-global_loop = None
-
 class InitializeGdriveClient(generic_widgets.PopupDialog):
     def __init__(self, loop, client, completionCallback=None, failureCallback=None):
         self.completionCallback = completionCallback
@@ -214,8 +211,13 @@ class OperationsPopup(generic_widgets.PopupDialog):
 
 class ProjectRow(generic_widgets.HighlightableListRow):
     DATE_FORMAT = "%b %-d %Y"
-    def __init__(self, project):
+    HOTKEYS = {
+        "detail": ("tab", "right"),
+    }
+
+    def __init__(self, project, loop):
         self.project = project
+        self.loop = loop
         self.selected_indicator_widget = urwid.Text("")
         self.set_selected(False)
         cells = urwid.Columns([
@@ -227,20 +229,19 @@ class ProjectRow(generic_widgets.HighlightableListRow):
         super().__init__(cells)
 
     def keypress(self, size, key):
-        if key in ("tab", "right"):
-            global global_loop
-            OperationsPopup(global_loop, self.project)
+        if key in self.HOTKEYS["detail"]:
+            OperationsPopup(self.loop, self.project)
+            return None
         return super().keypress(size, key)
 
     def set_selected(self, value):
-        global global_loop
         self.selected = value
         self.selected_indicator_widget.set_text("[%s]" % ("*" if value else " "))
         if value is True:
             def completion():
                 self.project.open()
             InitializeGdriveClient(
-                global_loop, self.project.download_client,
+                self.loop, self.project.download_client,
                 completionCallback=completion)
         else:
             self.project.close()
@@ -267,12 +268,12 @@ class RadioListbox(generic_widgets.MouseWheelListBox):
 class BrowserApplication(object):
     CLIPBOARD_POLL_SPEED = .5
     HOTKEYS = {
-        "reload": "ctrl r",
-        "filter": "ctrl f"
+        "reload": ("ctrl r",),
+        "filter": ("ctrl f",),
+        "quit": ("q", "Q")
     }
 
     def __init__(self, palette, working_dir, gdrive_client, project_filter, data_source):
-        global global_loop
         self.data_source = data_source
         self.palette = palette
         self.working_dir = working_dir
@@ -282,7 +283,6 @@ class BrowserApplication(object):
             self.working_dir = os.path.join(os.getcwd(), "downloads")
         self.loop = urwid.MainLoop(None, self.palette,
                                    unhandled_input=self.global_input)
-        global_loop = self.loop
         title_bar = urwid.AttrMap(urwid.Filler(urwid.Padding(urwid.Text("Projects")),'top'),'titlebar')
 
         if project_filter is None:
@@ -290,15 +290,27 @@ class BrowserApplication(object):
         else:
             self.project_filter = project_filter
 
+        hotkeys = list(self.HOTKEYS.items()) + list(ProjectRow.HOTKEYS.items())
+        hotkeys.sort(key=lambda elem: elem[0])
+        hotkey_widgets = []
+
+        for action, hotkey in hotkeys:
+            toolbar_button = generic_widgets.ToolbarButton(action.capitalize() + "\n" + "/".join(hotkey))
+            hotkey_widgets.append(toolbar_button)
+            urwid.connect_signal(toolbar_button, 'click', self.handle_toolbar_click, user_args=[hotkey[0]])
 
         self.project_list_walker = urwid.SimpleFocusListWalker([])
         self.project_list = RadioListbox(self.project_list_walker)
         self.loop.widget = urwid.Pile((
             (1, title_bar),
-            self.project_list
+            self.project_list,
+            (4, urwid.Columns(hotkey_widgets))
         ))
         self.waitDialog = None
         self.downloadDialog = generic_widgets.WaitDialog(self.loop, "Downloading project", attach=False, threadable=True)
+
+    def handle_toolbar_click(self, hotkey):
+        self.loop.process_input((hotkey,))
 
     def set_filter(self, new_filter):
         self.project_filter = new_filter
@@ -339,7 +351,7 @@ class BrowserApplication(object):
         self.displayed_projects = self.project_filter.filter(self.projects)
         if len(self.projects) > 0:
             for project in self.displayed_projects:
-                project_widget = ProjectRow(project)
+                project_widget = ProjectRow(project, self.loop)
                 self.project_list_walker.append(project_widget)
                 urwid.connect_signal(project_widget, 'doubleclick', self.project_list.update_selected)
             return True
@@ -360,12 +372,13 @@ class BrowserApplication(object):
         self.loop.run()
 
     def global_input(self, key):
-        if key == self.HOTKEYS["reload"]:
+        if key in self.HOTKEYS["reload"]:
             self.reload_projects()
             return None
-        if key == self.HOTKEYS["filter"]:
+        if key in self.HOTKEYS["filter"]:
             FilterDialog(self.loop, self.project_filter, self.set_filter)
-        if key in ('q', 'Q'):
+            return None
+        if key in self.HOTKEYS["quit"]:
             raise urwid.ExitMainLoop()
 
 
