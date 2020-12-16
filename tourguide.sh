@@ -44,7 +44,7 @@ run_loop() {
     do
         new_dir=`cat $WATCH_FILE`;
         pushd "$new_dir" && \
-            { $SHELL & export current_shell_pid=$!; } &&
+            { $SHELL --init-file <(echo "tree") & export current_shell_pid=$!; } &&
             popd &&
             { shell_killswitch & fg `pid_to_jobspec $current_shell_pid`; }
     done

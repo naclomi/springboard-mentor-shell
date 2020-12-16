@@ -77,7 +77,7 @@ def openAllFiles(fs_root):
                 mimetype = mimetypes.guess_type(filename)[0]
                 major, minor = mimetype.split("/")
                 file_list = None
-                if major == "text" or minor in ("javascript", "json", "xml"):
+                if major == "text" or minor in ("javascript", "json", "xml", "x-sql"):
                     file_list = "plaintext"
                 elif mimetype == "application/pdf":
                     file_list = "pdf"

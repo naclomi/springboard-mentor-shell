@@ -26,6 +26,9 @@ class GdriveClient(object):
         self.creds = None
         self.service = None
 
+    def matchURL(self, url):
+        return self.GDRIVE_URL_PARSER.match(url) is not None
+
     def initialized(self):
         return self.service is not None
 

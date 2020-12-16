@@ -8,7 +8,9 @@ import urwid
 import mentor_dashboard
 import shell_integration
 import generic_widgets
+
 import gdrive
+import github
 
 DEFAULT_PALETTE = (
     ('titlebar', urwid.BLACK, urwid.LIGHT_GRAY),
@@ -80,10 +82,12 @@ class FilterDialog(generic_widgets.PopupDialog):
         self.filter = initial_filter
         self.set_filter_callback = set_filter_callback
 
+        # filter_button = generic_widgets.ToolbarButton("Filter")
         filter_button = generic_widgets.HighlightableListRow(urwid.Text("[Filter]"))
         urwid.connect_signal(filter_button, 'click', self.filter_callback)
         urwid.connect_signal(filter_button, 'doubleclick', self.filter_callback)
 
+        # cancel_button = generic_widgets.ToolbarButton("Cancel")
         cancel_button = generic_widgets.HighlightableListRow(urwid.Text("[Cancel]"))
         urwid.connect_signal(cancel_button, 'click', self.detach)
         urwid.connect_signal(cancel_button, 'doubleclick', self.detach)
@@ -193,7 +197,7 @@ class OperationsPopup(generic_widgets.PopupDialog):
                 shell_integration.openFolder(uri)
         self.detach()
         InitializeGdriveClient(
-            self.loop, self.project.download_client,
+            self.loop, self.project.download_clients["gdrive"],
             completionCallback=completion)
 
     def uriToClipboard(self, *args, **kwargs):
@@ -205,7 +209,7 @@ class OperationsPopup(generic_widgets.PopupDialog):
             shell_integration.copyText(uris)
         self.detach()
         InitializeGdriveClient(
-            self.loop, self.project.download_client,
+            self.loop, self.project.download_clients["gdrive"],
             completionCallback=completion)
 
 
@@ -241,7 +245,7 @@ class ProjectRow(generic_widgets.HighlightableListRow):
             def completion():
                 self.project.open()
             InitializeGdriveClient(
-                self.loop, self.project.download_client,
+                self.loop, self.project.download_clients["gdrive"],
                 completionCallback=completion)
         else:
             self.project.close()
@@ -273,11 +277,11 @@ class BrowserApplication(object):
         "quit": ("q", "Q")
     }
 
-    def __init__(self, palette, working_dir, gdrive_client, project_filter, data_source):
+    def __init__(self, palette, working_dir, download_clients, project_filter, data_source):
         self.data_source = data_source
         self.palette = palette
         self.working_dir = working_dir
-        self.gdrive_client = gdrive_client
+        self.download_clients = download_clients
 
         if self.working_dir is None:
             self.working_dir = os.path.join(os.getcwd(), "downloads")
@@ -320,7 +324,14 @@ class BrowserApplication(object):
         success = False
         clipboard_result = shell_integration.getHTMLFromClipboard()
         if clipboard_result is not None:
-            self.projects = mentor_dashboard.getProjectsFromHTML(clipboard_result, self.working_dir)
+            self.projects = mentor_dashboard.getProjectsFromHTML(
+                clipboard_result,
+                download_clients=self.download_clients,
+                working_dir=self.working_dir,
+                startCallback=self.startDownloadDialog,
+                progressCallback=self.progressDownloadDialog,
+                completionCallback=self.completeDownloadDialog
+            )
             success = self.update_project_ui()
         if success:
             if self.waitDialog is not None:
@@ -338,7 +349,7 @@ class BrowserApplication(object):
         else:
             self.projects = mentor_dashboard.getProjectsFromHTML(
                 self.data_source,
-                download_client=self.gdrive_client,
+                download_clients=self.download_clients,
                 working_dir=self.working_dir,
                 startCallback=self.startDownloadDialog,
                 progressCallback=self.progressDownloadDialog,
@@ -416,14 +427,16 @@ def main():
     if args.working_dir is not None:
         args.working_dir = os.path.abspath(args.working_dir)
 
-    gdrive_client = gdrive.GdriveClient(
-        token_file=args.gdrive_token,
-        credentials_file=args.gdrive_credentials,
-    )
+    download_clients = {
+        "gdrive": gdrive.GdriveClient(
+                    token_file=args.gdrive_token,
+                    credentials_file=args.gdrive_credentials),
+        "github": github.GithubClient()
+    }
 
     app = BrowserApplication(
         palette,
-        gdrive_client=gdrive_client,
+        download_clients=download_clients,
         project_filter=project_filter,
         working_dir=args.working_dir,
         data_source=data_source)
