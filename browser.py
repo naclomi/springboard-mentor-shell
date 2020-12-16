@@ -368,11 +368,13 @@ class BrowserApplication(object):
             return True
         return False
 
-    def startDownloadDialog(self):
+    def startDownloadDialog(self, service):
+        self.downloadDialog.service = service
+        self.downloadDialog.threaded_set_text("Downloading project ("+self.downloadDialog.service+")\n 0%")
         self.downloadDialog.threadedAttach()
 
     def progressDownloadDialog(self, metadata, progress):
-        self.downloadDialog.threaded_set_text("Downloading project\n" + str(progress*100) + "%")
+        self.downloadDialog.threaded_set_text("Downloading project ("+self.downloadDialog.service+")\n" + str(progress*100) + "%")
 
     def completeDownloadDialog(self):
         self.downloadDialog.threadedDetach()

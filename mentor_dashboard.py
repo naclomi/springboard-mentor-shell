@@ -99,16 +99,16 @@ class Project(object):
             if os.path.exists(link_dir):
                 local_uris[link_name] = link_dir
             else:
-                if self.startCallback is not None:
-                    self.startCallback()
                 download_client = None
-                for candidate_client in self.download_clients.values():
+                for candidate_name, candidate_client in self.download_clients.items():
                     if candidate_client.matchURL(link):
                         download_client = candidate_client
                         break
                 if download_client is None:
                     # TODO: route error reporting through GUI
                     raise Exception("Unknown file provider for URL: %s" % link)
+                if self.startCallback is not None:
+                    self.startCallback(candidate_name)
                 result = download_client.downloadURL(
                     link, cwd=self.working_dir, dirname=link_dir,
                     progressCallback=self.progressCallback)
